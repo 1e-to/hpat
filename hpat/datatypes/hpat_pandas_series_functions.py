@@ -203,6 +203,45 @@ def hpat_pandas_series_append(self, to_append):
     return hpat_pandas_series_append_impl
 
 
+@overload_method(SeriesType, 'head')
+def hpat_pandas_series_head(self, n=5):
+    """
+    Pandas Series method :meth:`pandas.Series.head` implementation.
+
+    .. only:: developer
+
+       Test: python -m hpat.runtests hpat.tests.test_series.TestSeries.test_series_head1
+
+    Parameters
+    -----------
+    n: :obj:`int`
+               input argument, default 5
+
+    Returns
+    -------
+    :obj:`pandas.Series`
+         returns The first n rows of the caller object.
+
+    """
+
+    _func_name = 'Method head().'
+
+    if not isinstance(self, SeriesType):
+        raise TypingError(
+            '{} The object must be a pandas.series. Given self: {}'.format(_func_name, self))
+
+    if not isinstance(n, types.Integer):
+        raise TypingError(
+            '{} The parameter must be an integer type. Given type n: {}'.format(_func_name, n))
+
+    if not isinstance(self.index, types.NoneType):
+        def hpat_pandas_series_head_impl(self, n=5):
+
+            return pandas.Series(self._data[:n], self._index[:n])
+
+        return hpat_pandas_series_head_impl
+
+
 @overload_method(SeriesType, 'ne')
 def hpat_pandas_series_ne(lhs, rhs):
     """
