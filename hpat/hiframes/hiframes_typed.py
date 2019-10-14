@@ -306,6 +306,7 @@ class HiFramesTyped(object):
             assign.value = ir.Global("np.dtype({})".format(typ_str), np.dtype(typ_str), rhs.loc)
             return [assign]
 
+        # PR135. This needs to be commented out
         if isinstance(rhs_type, SeriesType) and rhs.attr == 'values':
             # simply return the column
             nodes = []
@@ -314,11 +315,12 @@ class HiFramesTyped(object):
             nodes.append(assign)
             return nodes
 
-        if isinstance(rhs_type, SeriesType) and rhs.attr == 'index':
-            nodes = []
-            assign.value = self._get_series_index(rhs.value, nodes)
-            nodes.append(assign)
-            return nodes
+        # PR171. This needs to be commented out
+        # if isinstance(rhs_type, SeriesType) and rhs.attr == 'index':
+        #     nodes = []
+        #     assign.value = self._get_series_index(rhs.value, nodes)
+        #     nodes.append(assign)
+        #     return nodes
 
         if isinstance(rhs_type, SeriesType) and rhs.attr == 'shape':
             nodes = []
@@ -593,15 +595,20 @@ class HiFramesTyped(object):
 
         self._convert_series_calltype(rhs)
         rhs.args = new_args
-        if isinstance(self.typemap[lhs], SeriesType):
+
+        # Second condition is to avoid chenging SeriesGroupBy class members
+        # test: python -m hpat.runtests hpat.tests.test_series.TestSeries.test_series_groupby_count
+        if isinstance(self.typemap[lhs], SeriesType) and not isinstance(func_mod, ir.Var):
             scope = assign.target.scope
             new_lhs = ir.Var(scope, mk_unique_var(lhs + '_data'), rhs.loc)
             self.typemap[new_lhs.name] = self.calltypes[rhs].return_type
             nodes.append(ir.Assign(rhs, new_lhs, rhs.loc))
-            return self._replace_func(lambda A: hpat.hiframes.api.init_series(A), [new_lhs], pre_nodes=nodes)
-        else:
-            nodes.append(assign)
-            return nodes
+            def _replace_func_param_impl(A):
+                return hpat.hiframes.api.init_series(A)
+            return self._replace_func(_replace_func_param_impl, [new_lhs], pre_nodes=nodes)
+
+        nodes.append(assign)
+        return nodes
 
     def _run_call_hiframes(self, assign, lhs, rhs, func_name):
         if func_name in ('to_arr_from_series',):
@@ -846,8 +853,8 @@ class HiFramesTyped(object):
         # single arg functions
         if func_name in ('sum', 'count', 'mean', 'var', 'min', 'max', 'prod'):
             if rhs.args or rhs.kws:
-                raise ValueError("unsupported Series.{}() arguments".format(
-                    func_name))
+                raise ValueError("HPAT pipeline does not support arguments for Series.{}()".format(func_name))
+
             # TODO: handle skipna, min_count arguments
             series_typ = self.typemap[series_var.name]
             series_dtype = series_typ.dtype
@@ -858,7 +865,7 @@ class HiFramesTyped(object):
             data = self._get_series_data(series_var, nodes)
             return self._replace_func(func, [data], pre_nodes=nodes)
 
-        if func_name in ('std', 'nunique', 'describe', 'abs', 'isna',
+        if func_name in ('std', 'nunique', 'describe', 'isna',
                          'isnull', 'median', 'idxmin', 'idxmax', 'unique'):
             if rhs.args or rhs.kws:
                 raise ValueError("unsupported Series.{}() arguments".format(
@@ -875,11 +882,22 @@ class HiFramesTyped(object):
         if func_name == 'quantile':
             nodes = []
             data = self._get_series_data(series_var, nodes)
-            return self._replace_func(
-                lambda A, q: hpat.hiframes.api.quantile(A, q),
-                [data, rhs.args[0]],
-                pre_nodes=nodes
-            )
+
+            def run_call_series_quantile(A, q):
+                return hpat.hiframes.api.quantile(A, q)
+
+            def run_call_series_quantile_default(A):
+                return hpat.hiframes.api.quantile(A, 0.5)
+
+            if len(rhs.args) == 0:
+                args = [data]
+                replacement_func = run_call_series_quantile_default
+            else:
+                assert len(rhs.args) == 1, "invalid args for " + func_name
+                args = [data, rhs.args[0]]
+                replacement_func = run_call_series_quantile
+
+            return self._replace_func(replacement_func, args, pre_nodes=nodes)
 
         if func_name == 'fillna':
             return self._run_call_series_fillna(assign, lhs, rhs, series_var)
@@ -1034,7 +1052,7 @@ class HiFramesTyped(object):
             return self._replace_func(_binop_impl, [series_var] + rhs.args)
 
         # functions we revert to Numpy for now, otherwise warning
-        _conv_to_np_funcs = ('copy', 'cumsum', 'cumprod', 'take', 'astype')
+        _conv_to_np_funcs = ('copy', 'cumsum', 'cumprod', 'astype')
         # TODO: handle series-specific cases for this funcs
         if (not func_name.startswith("values.") and func_name
                 not in _conv_to_np_funcs):

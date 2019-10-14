@@ -8,6 +8,8 @@ SPHINXPROJ    = HPAT
 SOURCEDIR     = .
 BUILDDIR      = _build
 DEVBUILDDIR   = _builddev
+PYRUN         = python
+DOCSRCDIR     = ./API_Doc
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
@@ -16,6 +18,7 @@ endif
 
 
 ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(SPHINXOPTS)
+DEV_ALLSPHINXOPTS = -d $(DEVBUILDDIR)/doctrees $(SPHINXOPTS)
 
 # Put it first so that "make" without argument is like "make help".
 help:
@@ -23,20 +26,24 @@ help:
 	
 
 clean:
-		rm -rf $(BUILDDIR)/* $(DEVBUILDDIR)/*
-
-	  
-
+		rm -rf $(BUILDDIR)/* $(DEVBUILDDIR)/*	  
+		rm -rf $(SOURCEDIR)$(DOCSRCDIR)
+		rm -rf $(SOURCEDIR)/usersource/api/*
 
 .PHONY: help Makefile
 
 html:
+	rm -rf $(SOURCEDIR)$(DOCSRCDIR)
+	$(PYRUN) rename_function.py
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) usersource -t user $(BUILDDIR)/html
+	$(PYRUN) CleanRSTfiles.py
+	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) usersource -t user $(BUILDDIR)/html 
 	@echo
-	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."     
+	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."  
+     
 
 developerhtml:
-	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) devsource -t developer $(DEVBUILDDIR)/html
+	$(SPHINXBUILD) -b html $(DEV_ALLSPHINXOPTS) devsource -t developer $(DEVBUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(DEVBUILDDIR)/html."     
 
