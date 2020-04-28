@@ -651,7 +651,6 @@ def sdc_overload_method(typ, name, jit_options={}, parallel=None, strict=True, i
 
     if inline is None:
         inline = 'always' if config_inline_overloads else 'never'
-
     return overload_method(typ, name, jit_options=jit_options, strict=strict, inline=inline)
 
 
